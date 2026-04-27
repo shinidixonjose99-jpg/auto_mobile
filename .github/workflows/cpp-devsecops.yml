@@ -1,0 +1,51 @@
+name: C++ DevSecOps Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-test-scan:
+    runs-on: ubuntu-latest
+
+    env:
+      APP_NAME: cpp-demo-app
+      IMAGE_TAG: ${{ github.run_number }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install C++ build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ make
+
+      - name: Configure CMake
+        run: cmake -S . -B build
+
+      - name: Build C++ application
+        run: cmake --build build
+
+      - name: Run application test
+        run: ./build/cpp-demo-app
+
+      - name: Build Docker image
+        run: docker build -t $APP_NAME:$IMAGE_TAG .
+
+      - name: Install Trivy
+        run: |
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+
+      - name: Trivy Docker image scan
+        run: |
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            $APP_NAME:$IMAGE_TAG
